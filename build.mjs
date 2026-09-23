@@ -18,20 +18,23 @@ const plugins = [
         name: "swc",
         async transform(code, id) {
             const ext = extname(id);
-            if (!extensions.includes(ext)) return null;
 
-            const ts = ext.includes("ts");
-            const tsx = ts ? ext.endsWith("x") : undefined;
-            const jsx = !ts ? ext.endsWith("x") : undefined;
+            if (!extensions.includes(ext)) {
+                return null;
+            }
+
+            const isTypeScript = [".ts", ".tsx", ".cts", ".mts"].includes(ext);
+            const isTSX = [".tsx"].includes(ext);
+            const isJSX = [".jsx"].includes(ext);
 
             const result = await swc.transform(code, {
                 filename: id,
                 jsc: {
                     externalHelpers: true,
                     parser: {
-                        syntax: ts ? "typescript" : "ecmascript",
-                        tsx,
-                        jsx,
+                        syntax: isTypeScript ? "typescript" : "ecmascript",
+                        tsx: isTSX,
+                        jsx: isJSX,
                     },
                 },
                 env: {
@@ -42,47 +45,85 @@ const plugins = [
                     ],
                 },
             });
-            return result.code;
+
+            return {
+                code: result.code,
+                map: result.map,
+            };
         },
     },
-    esbuild({ minify: true }),
+    esbuild({
+        minify: true,
+    }),
 ];
 
-for (let plug of await readdir("./plugins")) {
-    const manifest = JSON.parse(await readFile(`./plugins/${plug}/manifest.json`));
-    const outPath = `./dist/${plug}/index.js`;
+const pluginFolders = await readdir("./plugins");
+
+for (const plugin of pluginFolders) {
+    const pluginPath = `./plugins/${plugin}`;
+    const manifestPath = `${pluginPath}/manifest.json`;
 
     try {
+        const manifest = JSON.parse(
+            await readFile(manifestPath, "utf8")
+        );
+
+        if (!manifest.main) {
+            throw new Error(
+                `manifest.json for ${plugin} is missing the "main" field.`
+            );
+        }
+
+        const inputPath = `${pluginPath}/${manifest.main}`;
+        const outputDirectory = `./dist/${plugin}`;
+        const outPath = `${outputDirectory}/index.js`;
+
+        console.log(`Building ${manifest.name || plugin}...`);
+        console.log(`Entry: ${inputPath}`);
+
         const bundle = await rollup({
-            input: `./plugins/${plug}/${manifest.main}`,
+            input: inputPath,
             onwarn: () => {},
             plugins,
         });
-    
+
         await bundle.write({
             file: outPath,
             globals(id) {
-                if (id.startsWith("@vendetta")) return id.substring(1).replace(/\//g, ".");
-                const map = {
+                if (id.startsWith("@vendetta")) {
+                    return id.substring(1).replace(/\//g, ".");
+                }
+
+                const globals = {
                     react: "window.React",
                 };
 
-                return map[id] || null;
+                return globals[id] || null;
             },
             format: "iife",
             compact: true,
             exports: "named",
         });
+
         await bundle.close();
-    
-        const toHash = await readFile(outPath);
-        manifest.hash = createHash("sha256").update(toHash).digest("hex");
+
+        const builtPlugin = await readFile(outPath);
+
+        manifest.hash = createHash("sha256")
+            .update(builtPlugin)
+            .digest("hex");
+
         manifest.main = "index.js";
-        await writeFile(`./dist/${plug}/manifest.json`, JSON.stringify(manifest));
-    
-        console.log(`Successfully built ${manifest.name}!`);
-    } catch (e) {
-        console.error("Failed to build plugin...", e);
+
+        await writeFile(
+            `${outputDirectory}/manifest.json`,
+            JSON.stringify(manifest, null, 2)
+        );
+
+        console.log(`Successfully built ${manifest.name || plugin}!`);
+    } catch (error) {
+        console.error(`Failed to build plugin "${plugin}"...`);
+        console.error(error);
         process.exit(1);
     }
 }
