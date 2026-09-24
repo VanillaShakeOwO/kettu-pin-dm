@@ -19,26 +19,20 @@ export default {
                 const results: string[] = [];
 
                 for (const name of names) {
-                    const byName = findByNameAll(name, true) ?? [];
-                    const byDefaultName = findByNameAll(name, false) ?? [];
-                    const byDisplay = findByDisplayNameAll(name, true) ?? [];
-                    const byDefaultDisplay = findByDisplayNameAll(name, false) ?? [];
+                    const a = findByNameAll(name, true) ?? [];
+                    const b = findByNameAll(name, false) ?? [];
+                    const c = findByDisplayNameAll(name, true) ?? [];
+                    const d = findByDisplayNameAll(name, false) ?? [];
 
-                    const count =
-                        byName.length +
-                        byDefaultName.length +
-                        byDisplay.length +
-                        byDefaultDisplay.length;
-
-                    results.push(`${name}: ${count}`);
+                    results.push(`${name}: ${a.length + b.length + c.length + d.length}`);
                 }
 
-                logger.log("[DM Collections] Module scan:", results);
+                logger.log("[DM Collections] Scan:", results);
 
                 showSimpleActionSheet({
                     key: "DMCollectionsDiagnostic",
                     header: {
-                        title: "DM Collections Diagnostic",
+                        title: "DM Collections Scan",
                     },
                     options: results.map((result) => ({
                         label: result,
@@ -46,7 +40,7 @@ export default {
                     })),
                 });
             } catch (e) {
-                logger.error("[DM Collections] Diagnostic failed:", e);
+                logger.error("[DM Collections] Scan failed:", e);
             }
         }, 1000);
     },
