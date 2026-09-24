@@ -1,7 +1,6 @@
 import { logger } from "@vendetta";
 import { findByProps } from "@vendetta/metro";
 import { after } from "@vendetta/patcher";
-import { showInputAlert } from "@vendetta/ui/alerts";
 
 type DMCollection = {
     id: string;
@@ -35,150 +34,63 @@ function uuid() {
 function ensureStorage() {
     storage ??= (window as any).vendetta?.plugin?.storage as Store;
 
-    if (!storage) {
-        storage = { collections: [] };
-    }
-
+    if (!storage) storage = { collections: [] };
     storage.collections ??= [];
-}
-
-function openColorPicker(
-    collection?: DMCollection,
-    afterPick?: (color: string) => void,
-) {
-    const show =
-        findByProps("showSimpleActionSheet")?.showSimpleActionSheet;
-
-    if (!show) {
-        logger.error("[DM Collections] Action sheet unavailable.");
-        return;
-    }
-
-    const options: any[] = COLORS.map((color) => ({
-        label: color,
-        onPress: () => {
-            if (collection) {
-                collection.color = color;
-            }
-
-            afterPick?.(color);
-        },
-    }));
-
-    options.push({
-        label: "Custom HEX...",
-        onPress: () => {
-            showInputAlert({
-                title: "Custom Collection Color",
-                initialValue: collection?.color ?? "#5865F2",
-                placeholder: "#5865F2",
-                confirmText: "Save",
-                cancelText: "Cancel",
-                onConfirm: (value: string) => {
-                    const color = value.trim();
-
-                    if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
-                        return;
-                    }
-
-                    if (collection) {
-                        collection.color = color;
-                    }
-
-                    afterPick?.(color);
-                },
-            });
-        },
-    });
-
-    show({
-        key: "DMCollectionsColor",
-        header: {
-            title: "Collection Color",
-        },
-        options,
-    });
 }
 
 function createCollection() {
     ensureStorage();
 
-    showInputAlert({
-        title: "Create Collection",
-        placeholder: "Collection name",
-        confirmText: "Next",
-        cancelText: "Cancel",
-        onConfirm: (name: string) => {
-            const trimmed = name.trim();
+    const number = storage.collections.length + 1;
 
-            if (!trimmed) {
-                return;
-            }
+    const collection: DMCollection = {
+        id: uuid(),
+        name: `Collection ${number}`,
+        color: COLORS[0],
+        dmIds: [],
+    };
 
-            const collection: DMCollection = {
-                id: uuid(),
-                name: trimmed,
-                color: COLORS[0],
-                dmIds: [],
-            };
+    storage.collections.push(collection);
 
-            storage.collections.push(collection);
+    logger.log(`[DM Collections] Created "${collection.name}".`);
+    openCollectionsMenu();
+}
 
-            openColorPicker(collection, () => {
-                logger.log(
-                    `[DM Collections] Created "${collection.name}"`,
-                );
-            });
-        },
+function openColorPicker(collection: DMCollection) {
+    const show = findByProps("showSimpleActionSheet")?.showSimpleActionSheet;
+    if (!show) return;
+
+    show({
+        key: "DMCollectionsColor",
+        header: { title: "Collection Color" },
+        options: COLORS.map((color) => ({
+            label: color,
+            onPress: () => {
+                collection.color = color;
+            },
+        })),
     });
 }
 
 function manageCollection(collection: DMCollection) {
-    const show =
-        findByProps("showSimpleActionSheet")?.showSimpleActionSheet;
-
-    if (!show) {
-        return;
-    }
+    const show = findByProps("showSimpleActionSheet")?.showSimpleActionSheet;
+    if (!show) return;
 
     show({
         key: "DMCollectionsCollection",
-        header: {
-            title: collection.name,
-        },
+        header: { title: collection.name },
         options: [
             {
-                label: "Rename",
-                onPress: () => {
-                    showInputAlert({
-                        title: "Rename Collection",
-                        initialValue: collection.name,
-                        confirmText: "Save",
-                        cancelText: "Cancel",
-                        onConfirm: (name: string) => {
-                            const trimmed = name.trim();
-
-                            if (trimmed) {
-                                collection.name = trimmed;
-                            }
-                        },
-                    });
-                },
-            },
-            {
                 label: "Change Color",
-                onPress: () => {
-                    openColorPicker(collection);
-                },
+                onPress: () => openColorPicker(collection),
             },
             {
                 label: "Delete Collection",
                 isDestructive: true,
                 onPress: () => {
-                    storage.collections =
-                        storage.collections.filter(
-                            (item) => item.id !== collection.id,
-                        );
+                    storage.collections = storage.collections.filter(
+                        (item) => item.id !== collection.id,
+                    );
                 },
             },
         ],
@@ -188,12 +100,8 @@ function manageCollection(collection: DMCollection) {
 function openCollectionsMenu() {
     ensureStorage();
 
-    const show =
-        findByProps("showSimpleActionSheet")?.showSimpleActionSheet;
-
-    if (!show) {
-        return;
-    }
+    const show = findByProps("showSimpleActionSheet")?.showSimpleActionSheet;
+    if (!show) return;
 
     const options: any[] = [
         {
@@ -211,9 +119,7 @@ function openCollectionsMenu() {
 
     show({
         key: "DMCollections",
-        header: {
-            title: "DM Collections",
-        },
+        header: { title: "DM Collections" },
         options,
     });
 }
@@ -222,63 +128,31 @@ function patchDMButtonLongPress() {
     const module = findByProps("showSimpleActionSheet");
 
     if (!module?.showSimpleActionSheet) {
-        logger.error(
-            "[DM Collections] Could not find showSimpleActionSheet.",
-        );
-
+        logger.error("[DM Collections] Could not find showSimpleActionSheet.");
         return () => {};
     }
 
-    return after(
-        "showSimpleActionSheet",
-        module,
-        (args: any[]) => {
-            const sheet = args?.[0];
+    return after("showSimpleActionSheet", module, (args: any[]) => {
+        const sheet = args?.[0];
 
-            if (!sheet) {
-                return;
-            }
+        if (!sheet || sheet.__dmCollectionsInjected) return;
 
-            const key = String(sheet.key ?? "").toLowerCase();
-            const title = String(
-                sheet.header?.title ?? "",
-            ).toLowerCase();
+        if (!Array.isArray(sheet.options)) return;
 
-            const looksLikeLongPress =
-                key.includes("longpress") ||
-                key.includes("tab") ||
-                key.includes("nav");
+        sheet.__dmCollectionsInjected = true;
 
-            const looksLikeDMButton =
-                title.includes("direct message") ||
-                title === "messages" ||
-                title === "dms" ||
-                title.includes("direct messages");
+        sheet.options.unshift({
+            label: "Create Collection",
+            onPress: createCollection,
+        });
 
-            if (!looksLikeLongPress && !looksLikeDMButton) {
-                return;
-            }
-
-            if (sheet.__dmCollectionsInjected) {
-                return;
-            }
-
-            sheet.__dmCollectionsInjected = true;
-            sheet.options ??= [];
-
-            sheet.options.unshift({
-                label: "Create Collection",
-                onPress: createCollection,
+        if (storage?.collections?.length) {
+            sheet.options.splice(1, 0, {
+                label: "DM Collections",
+                onPress: openCollectionsMenu,
             });
-
-            if (storage?.collections?.length) {
-                sheet.options.splice(1, 0, {
-                    label: "DM Collections",
-                    onPress: openCollectionsMenu,
-                });
-            }
-        },
-    );
+        }
+    });
 }
 
 export default {
@@ -287,15 +161,10 @@ export default {
 
         try {
             const patch = patchDMButtonLongPress();
-
             unpatches.push(patch);
-
             logger.log("[DM Collections] Loaded successfully.");
         } catch (error) {
-            logger.error(
-                "[DM Collections] Failed to load.",
-                error,
-            );
+            logger.error("[DM Collections] Failed to load.", error);
         }
     },
 
