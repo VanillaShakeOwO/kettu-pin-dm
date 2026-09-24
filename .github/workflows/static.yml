@@ -47,9 +47,43 @@ jobs:
       - name: Prepare Pages site
         run: |
           mkdir -p site/dm-collections
+
           cp dist/dm-collections/index.js site/dm-collections/
           cp dist/dm-collections/manifest.json site/dm-collections/
 
+          cat > site/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Kettu Plugins</title>
+          </head>
+          <body>
+            <h1>Kettu Plugins</h1>
+            <p>DM Collections</p>
+            <a href="dm-collections/">DM Collections</a>
+          </body>
+          </html>
+          EOF
+
+          cat > site/dm-collections/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>DM Collections</title>
+          </head>
+          <body>
+            <h1>DM Collections</h1>
+            <p>Kettu plugin files:</p>
+            <ul>
+              <li><a href="manifest.json">manifest.json</a></li>
+              <li><a href="index.js">index.js</a></li>
+            </ul>
+          </body>
+          </html>
+          EOF
+          
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
