@@ -1,0 +1,15 @@
+{
+  "name": "DM Collections",
+  "description": "Long-press the Discord DM/chat bubble to create and manage local DM collections.",
+  "authors": [
+    {
+      "name": "Kettu DM Collections",
+      "id": "000000000000000000"
+    }
+  ],
+  "main": "index.js",
+  "vendetta": {
+    "icon": "ic_message_favorite_24px"
+  },
+  "hash": "82acc8d3d1090a185231f2537e591a5092c1785540374b34f8fd5c65084b13c4"
+}
